@@ -1,182 +1,408 @@
 package utilities;
-
-import java.sql.*;
+import org.apache.commons.io.FileUtils;
+import org.openqa.selenium.*;
+import org.openqa.selenium.interactions.Actions;
+import org.openqa.selenium.support.ui.ExpectedCondition;
+import org.openqa.selenium.support.ui.ExpectedConditions;
+import org.openqa.selenium.support.ui.WebDriverWait;
+import org.junit.Assert;
+import java.io.File;
+import java.io.IOException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.Date;
 import java.util.List;
-import java.util.Map;
+
 
 public class BrowserUtils {
-    private static Connection connection;
-    private static Statement statement;
-    private static ResultSet resultSet;
+    /*
+     * takes screenshot
+     * @param name
+     * take a name of a test and returns a path to screenshot takes
+     */
+    public static String getScreenshot(String name) throws IOException {
+        // name the screenshot with the current date time to avoid duplicate name
+        String date = new SimpleDateFormat("yyyyMMddhhmmss").format(new Date());
+        // TakesScreenshot ---> interface from selenium which takes screenshots
+        TakesScreenshot ts = (TakesScreenshot) Driver.get();
+        File source = ts.getScreenshotAs(OutputType.FILE);
+        // full path to the screenshot location
+        String target = System.getProperty("user.dir") + "/test-output/Screenshots/" + name + date + ".png";
+        File finalDestination = new File(target);
+        // save the screenshot to the path given
+        FileUtils.copyFile(source, finalDestination);
+        return target;
+    }
 
-    public static void createConnection() {
-        String dbUrl = ConfigurationReader.get("spartan.DBUrl");
-        String dbUsername = ConfigurationReader.get("spartan.DBusername");
-        String dbPassword = ConfigurationReader.get("spartan.DBpassword");
+    /**
+     * Switches to new window by the exact title. Returns to original window if target title not found
+     * @param targetTitle
+     */
+    public static void switchToWindow(String targetTitle,WebDriver driver) {
+        String origin = Driver.get().getWindowHandle();
+        for (String handle : Driver.get().getWindowHandles()) {
+            Driver.get().switchTo().window(handle);
+            if (Driver.get().getTitle().equals(targetTitle)) {
+                return;
+            }
+        }
+        Driver.get().switchTo().window(origin);
+    }
+
+    /**
+     * Moves the mouse to given element
+     *
+     * @param element on which to hover
+     */
+    public static void hover(WebElement element) {
+        Actions actions = new Actions(Driver.get());
+        actions.moveToElement(element).perform();
+    }
+
+
+
+    /**
+     * return a list of string from a list of elements
+     *
+     * @param list of webelements
+     * @return list of string
+     */
+    public static List<String> getElementsText(List<WebElement> list) {
+        List<String> elemTexts = new ArrayList<>();
+        for (WebElement el : list) {
+            elemTexts.add(el.getText());
+        }
+        return elemTexts;
+    }
+
+    /**
+     * Extracts text from list of elements matching the provided locator into new List<String>
+     *
+     * @param locator
+     * @return list of strings
+     */
+    public static List<String> getElementsText(By locator) {
+
+        List<WebElement> elems = Driver.get().findElements(locator);
+        List<String> elemTexts = new ArrayList<>();
+
+        for (WebElement el : elems) {
+            elemTexts.add(el.getText());
+        }
+        return elemTexts;
+    }
+
+    /**
+     * Performs a pause
+     *
+     * @param seconds
+     */
+    public static void waitFor(int seconds) {
         try {
-            connection = DriverManager.getConnection(dbUrl, dbUsername, dbPassword);
-        } catch (SQLException e) {
-            // TODO Auto-generated catch block
+            Thread.sleep(seconds * 1000);
+        } catch (InterruptedException e) {
             e.printStackTrace();
         }
     }
-    public static void destroy() {
+
+    /**
+     * Waits for the provided element to be visible on the page
+     *
+     * @param element
+     * @param timeToWaitInSec
+     * @return
+     */
+    public static WebElement waitForVisibility(WebElement element, int timeToWaitInSec) {
+        WebDriverWait wait = new WebDriverWait(Driver.get(), timeToWaitInSec);
+        return wait.until(ExpectedConditions.visibilityOf(element));
+    }
+
+    /**
+     * Waits for element matching the locator to be visible on the page
+     *
+     * @param locator
+     * @param timeout
+     * @return
+     */
+    public static WebElement waitForVisibility(By locator, int timeout) {
+        WebDriverWait wait = new WebDriverWait(Driver.get(), timeout);
+        return wait.until(ExpectedConditions.visibilityOfElementLocated(locator));
+    }
+
+    /**
+     * Waits for provided element to be clickable
+     *
+     * @param element
+     * @param timeout
+     * @return
+     */
+    public static WebElement waitForClickablility(WebElement element, int timeout) {
+        WebDriverWait wait = new WebDriverWait(Driver.get(), timeout);
+        return wait.until(ExpectedConditions.elementToBeClickable(element));
+    }
+
+    /**
+     * Waits for element matching the locator to be clickable
+     *
+     * @param locator
+     * @param timeout
+     * @return
+     */
+    public static WebElement waitForClickablility(By locator, int timeout) {
+        WebDriverWait wait = new WebDriverWait(Driver.get(), timeout);
+        return wait.until(ExpectedConditions.elementToBeClickable(locator));
+    }
+
+    /**
+     * waits for backgrounds processes on the browser to complete
+     *
+     * @param timeOutInSeconds
+     */
+    public static void waitForPageToLoad(long timeOutInSeconds) {
+        ExpectedCondition<Boolean> expectation = new ExpectedCondition<Boolean>() {
+            public Boolean apply(WebDriver driver) {
+                return ((JavascriptExecutor) driver).executeScript("return document.readyState").equals("complete");
+            }
+        };
         try {
-            if (resultSet != null) {
-                resultSet.close();
-            }
-            if (statement != null) {
-                statement.close();
-            }
-            if (connection != null) {
-                connection.close();
-            }
-        } catch (SQLException e) {
+            WebDriverWait wait = new WebDriverWait(Driver.get(), timeOutInSeconds);
+            wait.until(expectation);
+        } catch (Throwable error) {
+            error.printStackTrace();
+        }
+    }
+
+    /**
+     * Verifies whether the element matching the provided locator is displayed on page
+     *
+     * @param by
+     * @throws AssertionError if the element matching the provided locator is not found or not displayed
+     */
+    public static void verifyElementDisplayed(By by) {
+        try {
+            Assert.assertTrue("Element not visible: " + by, Driver.get().findElement(by).isDisplayed());
+        } catch (NoSuchElementException e) {
             e.printStackTrace();
+            Assert.fail("Element not found: " + by);
+
         }
     }
     /**
+     * Verifies whether the element matching the provided locator is NOT displayed on page
      *
-     * @param query
-     * @return returns a single cell value. If the results in multiple rows and/or
-     *         columns of data, only first column of the first row will be returned.
-     *         The rest of the data will be ignored
+     * @param by
+     * @throws AssertionError the element matching the provided locator is displayed
      */
-    public static Object getCellValue(String query) {
-        return getQueryResultList(query).get(0).get(0);
-    }
-    /**
-     *
-     * @param query
-     * @return returns a list of Strings which represent a row of data. If the query
-     *         results in multiple rows and/or columns of data, only first row will
-     *         be returned. The rest of the data will be ignored
-     */
-    public static List<Object> getRowList(String query) {
-        return getQueryResultList(query).get(0);
-    }
-    /**
-     *
-     * @param query
-     * @return returns a map which represent a row of data where key is the column
-     *         name. If the query results in multiple rows and/or columns of data,
-     *         only first row will be returned. The rest of the data will be ignored
-     */
-    public static Map<String, Object> getRowMap(String query) {
-        return getQueryResultMap(query).get(0);
-    }
-    /**
-     *
-     * @param query
-     * @return returns query result in a list of lists where outer list represents
-     *         collection of rows and inner lists represent a single row
-     */
-    public static List<List<Object>> getQueryResultList(String query) {
-        executeQuery(query);
-        List<List<Object>> rowList = new ArrayList<>();
-        ResultSetMetaData rsmd;
+    public static void verifyElementNotDisplayed(By by) {
         try {
-            rsmd = resultSet.getMetaData();
-            while (resultSet.next()) {
-                List<Object> row = new ArrayList<>();
-                for (int i = 1; i <= rsmd.getColumnCount(); i++) {
-                    row.add(resultSet.getObject(i));
+            Assert.assertFalse("Element should not be visible: " + by, Driver.get().findElement(by).isDisplayed());
+        } catch (NoSuchElementException e) {
+            e.printStackTrace();
+
+        }
+    }
+
+
+    /**
+     * Verifies whether the element is displayed on page
+     *
+     * @param element
+     * @throws AssertionError if the element is not found or not displayed
+     */
+    public static void verifyElementDisplayed(WebElement element) {
+        try {
+            Assert.assertTrue("Element not visible: " + element, element.isDisplayed());
+        } catch (NoSuchElementException e) {
+            e.printStackTrace();
+            Assert.fail("Element not found: " + element);
+
+        }
+    }
+
+
+    /**
+     * Waits for element to be not stale
+     *
+     * @param element
+     */
+    public static void waitForStaleElement(WebElement element) {
+        int y = 0;
+        while (y <= 15) {
+            if (y == 1)
+                try {
+                    element.isDisplayed();
+                    break;
+                } catch (StaleElementReferenceException st) {
+                    y++;
+                    try {
+                        Thread.sleep(300);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                } catch (WebDriverException we) {
+                    y++;
+                    try {
+                        Thread.sleep(300);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
                 }
-                rowList.add(row);
-            }
-        } catch (SQLException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
         }
-        return rowList;
     }
+
+
     /**
+     * Clicks on an element using JavaScript
      *
-     * @param query
-     * @param column
-     * @return list of values of a single column from the result set
+     * @param element
      */
-    public static List<Object> getColumnData(String query, String column) {
-        executeQuery(query);
-        List<Object> rowList = new ArrayList<>();
-        ResultSetMetaData rsmd;
-        try {
-            rsmd = resultSet.getMetaData();
-            while (resultSet.next()) {
-                rowList.add(resultSet.getObject(column));
-            }
-        } catch (SQLException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
-        }
-        return rowList;
+    public static void clickWithJS(WebElement element) {
+        ((JavascriptExecutor) Driver.get()).executeScript("arguments[0].scrollIntoView(true);", element);
+        ((JavascriptExecutor) Driver.get()).executeScript("arguments[0].click();", element);
     }
+
+
     /**
+     * Scrolls down to an element using JavaScript
      *
-     * @param query
-     * @return returns query result in a list of maps where the list represents
-     *         collection of rows and a map represents represent a single row with
-     *         key being the column name
+     * @param element
      */
-    public static List<Map<String, Object>> getQueryResultMap(String query) {
-        executeQuery(query);
-        List<Map<String, Object>> rowList = new ArrayList<>();
-        ResultSetMetaData rsmd;
-        try {
-            rsmd = resultSet.getMetaData();
-            while (resultSet.next()) {
-                Map<String, Object> colNameValueMap = new HashMap<>();
-                for (int i = 1; i <= rsmd.getColumnCount(); i++) {
-                    colNameValueMap.put(rsmd.getColumnName(i), resultSet.getObject(i));
-                }
-                rowList.add(colNameValueMap);
-            }
-        } catch (SQLException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
-        }
-        return rowList;
+    public static void scrollToElement(WebElement element) {
+        ((JavascriptExecutor) Driver.get()).executeScript("arguments[0].scrollIntoView(true);", element);
     }
+
+
+
     /**
+     * Performs double click action on an element
      *
-     * @param query
-     * @return List of columns returned in result set
+     * @param element
      */
-    public static List<String> getColumnNames(String query) {
-        executeQuery(query);
-        List<String> columns = new ArrayList<>();
-        ResultSetMetaData rsmd;
-        try {
-            rsmd = resultSet.getMetaData();
-            int columnCount = rsmd.getColumnCount();
-            for (int i = 1; i <= columnCount; i++) {
-                columns.add(rsmd.getColumnName(i));
+    public static void doubleClick(WebElement element) {
+        new Actions(Driver.get()).doubleClick(element).build().perform();
+    }
+
+    /**
+     * Changes the HTML attribute of a Web Element to the given value using JavaScript
+     *
+     * @param element
+     * @param attributeName
+     * @param attributeValue
+     */
+    public static void setAttribute(WebElement element, String attributeName, String attributeValue) {
+        ((JavascriptExecutor) Driver.get()).executeScript("arguments[0].setAttribute(arguments[1], arguments[2]);", element, attributeName, attributeValue);
+    }
+
+    /**
+     * Highlighs an element by changing its background and border color
+     * @param element
+     */
+    public static void highlight(WebElement element) {
+        ((JavascriptExecutor) Driver.get()).executeScript("arguments[0].setAttribute('style', 'background: yellow; border: 2px solid red;');", element);
+        waitFor(1);
+        ((JavascriptExecutor) Driver.get()).executeScript("arguments[0].removeAttribute('style', 'background: yellow; border: 2px solid red;');", element);
+    }
+
+    /**
+     * Checks or unchecks given checkbox
+     *
+     * @param element
+     * @param check
+     */
+    public static void selectCheckBox(WebElement element, boolean check) {
+        if (check) {
+            if (!element.isSelected()) {
+                element.click();
             }
-        } catch (SQLException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
-        }
-        return columns;
-    }
-    private static void executeQuery(String query) {
-        try {
-            statement = connection.createStatement(ResultSet.TYPE_SCROLL_INSENSITIVE, ResultSet.CONCUR_READ_ONLY);
-        } catch (SQLException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
-        }
-        try {
-            resultSet = statement.executeQuery(query);
-        } catch (SQLException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
+        } else {
+            if (element.isSelected()) {
+                element.click();
+            }
         }
     }
-    public static int getRowCount() throws Exception {
-        resultSet.last();
-        int rowCount = resultSet.getRow();
-        return rowCount;
+
+    /**
+     * attempts to click on provided element until given time runs out
+     *
+     * @param element
+     * @param timeout
+     */
+    public static void clickWithTimeOut(WebElement element, int timeout) {
+        for (int i = 0; i < timeout; i++) {
+            try {
+                element.click();
+                return;
+            } catch (WebDriverException e) {
+                waitFor(1);
+            }
+        }
     }
+
+    /**
+     * executes the given JavaScript command on given web element
+     *
+     * @param element
+     */
+    public static void executeJScommand(WebElement element, String command) {
+        JavascriptExecutor jse = (JavascriptExecutor) Driver.get();
+        jse.executeScript(command, element);
+
+    }
+
+    /**
+     * executes the given JavaScript command on given web element
+     *
+     * @param command
+     */
+    public static void executeJScommand(String command) {
+        JavascriptExecutor jse = (JavascriptExecutor) Driver.get();
+        jse.executeScript(command);
+
+    }
+
+
+    /**
+     * This method will recover in case of exception after unsuccessful the click,
+     * and will try to click on element again.
+     *
+     * @param by
+     * @param attempts
+     */
+    public static void clickWithWait(By by, int attempts) {
+        int counter = 0;
+        //click on element as many as you specified in attempts parameter
+        while (counter < attempts) {
+            try {
+                //selenium must look for element again
+                clickWithJS(Driver.get().findElement(by));
+                //if click is successful - then break
+                break;
+            } catch (WebDriverException e) {
+                //if click failed
+                //print exception
+                //print attempt
+                e.printStackTrace();
+                ++counter;
+                //wait for 1 second, and try to click again
+                waitFor(1);
+            }
+        }
+    }
+
+    /**
+     *  checks that an element is present on the DOM of a page. This does not
+     *    * necessarily mean that the element is visible.
+     * @param by
+     * @param time
+     */
+    public static void waitForPresenceOfElement(By by, long time) {
+        new WebDriverWait(Driver.get(), time).until(ExpectedConditions.presenceOfElementLocated(by));
+    }
+
+
+
+
+
+
 }
+
